@@ -99,8 +99,8 @@
               body: JSON.stringify(payload)
             })
             .then(response => response.json())
-            .then(data => console.log("✅ Sent to Cloudflare Worker:", data))
-            .catch(error => console.error("❌ Error sending to Cloudflare:", error));
+            .then(data => console.log("✅ Sent:", data))
+            .catch(error => console.error("❌ Error:", error));
           });
         }
       }).render("#paypal-button-container");

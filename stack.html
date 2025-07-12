@@ -77,7 +77,8 @@
             abbreviation: abbreviation,
             Country: Country,
             paid_at: paidAt,
-            transactionId: response.reference
+            transactionId: response.reference,
+            Payment_Method: "Paystack"
           }),
         }).then(() => {
           alert("✅ Payment successful! You may now return to the app.");

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Checkout with PayPal</title>
+  <style>
+    body {
+      padding: 20px;
+      display: none;
+    }
+    h1 {
+      text-align: center;
+    }
+  </style>
+  <script>
+    function getPaymentData() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const data = {
+          email: params.get("email") || "",
+          Client_Id: params.get("Client_Id") || "",
+          Plan_Name: params.get("Plan_Name") || "Default Plan",
+          Country: params.get("Country") || "",
+          Country_Code: params.get("Country_Code") || "US",
+          Plan_Cost: params.get("Plan_Cost") || "0.00",
+          Plan_Expiry: params.get("Plan_Expiry") || "",
+          abbreviation: params.get("abbreviation") || ""
+        };
+
+        // Validate required fields
+        if (!data.email || !data.Client_Id || !data.Plan_Name || !data.Plan_Cost) {
+          console.error("Missing required data.");
+          return null;
+        }
+
+        return data;
+      } catch (error) {
+        console.error("Error parsing query params: ", error);
+        return null;
+      }
+    }
+
+    const paymentData = getPaymentData();
+
+    if (paymentData) {
+      document.addEventListener("DOMContentLoaded", function () {
+        document.body.style.display = "block";
+        document.getElementById("plan-name").textContent = paymentData.Plan_Name;
+        document.getElementById("cost").textContent = paymentData.Plan_Cost;
+
+        const script = document.createElement("script");
+        script.src = `https://www.paypal.com/sdk/js?client-id=${paymentData.Client_Id}`;
+        script.onload = loadPayPalButtons;
+        document.body.appendChild(script);
+      });
+    }
+
+    function loadPayPalButtons() {
+      paypal.Buttons({
+        createOrder: function (data, actions) {
+          return actions.order.create({
+            purchase_units: [{
+              amount: { value: paymentData.Plan_Cost }
+            }],
+            application_context: {
+              shipping_preference: "NO_SHIPPING"
+            }
+          });
+        },
+        onApprove: function (data, actions) {
+          return actions.order.capture().then(function (details) {
+            setTimeout(() => {
+              alert("✅ Payment Successful!\n\nYou can now return to the app.");
+            }, 200);
+
+            const transactionId = details.id;
+            const paidAt = new Date().toISOString();
+            const formattedCountry = `${paymentData.Country} (${paymentData.Country_Code})`;
+
+            const cloudflareUrl = "https://omp-subscription-handler.alexskeioslav.workers.dev/";
+
+            const payload = {
+              email: paymentData.email,
+              Plan_Name: paymentData.Plan_Name,
+              Plan_Cost: paymentData.Plan_Cost,
+              Plan_Expiry: paymentData.Plan_Expiry,
+              abbreviation: paymentData.abbreviation,
+              transactionId: transactionId,
+              paid_at: paidAt,
+              Country: formattedCountry
+            };
+
+            fetch(cloudflareUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => console.log("✅ Sent to Cloudflare Worker:", data))
+            .catch(error => console.error("❌ Error sending to Cloudflare:", error));
+          });
+        }
+      }).render("#paypal-button-container");
+    }
+  </script>
+</head>
+<body>
+  <h1>Complete Checkout</h1>
+  <p style="text-align: center;">
+    Plan: <strong><span id="plan-name"></span></strong> -
+    Cost: <strong>$<span id="cost"></span></strong>
+  </p>
+  <div id="paypal-button-container"></div>
+</body>
+</html>
+

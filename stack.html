@@ -17,73 +17,77 @@
   <h2>Initiating Payment...</h2>
 
   <script>
-    (async function () {
-      const query = new URLSearchParams(window.location.search);
-      const ref = query.get("ref");
+  (async function () {
+    const query = new URLSearchParams(window.location.search);
+    const ref = query.get("ref");
 
-      if (!ref) {
-        alert("Missing reference ID.");
-        return;
+    if (!ref) {
+      alert("Missing reference ID.");
+      return;
+    }
+
+    // Step 1: Fetch KV data from Cloudflare
+    const dataRes = await fetch("https://paystack-access-code.alexskeioslav.workers.dev/get?ref=" + ref);
+    if (!dataRes.ok) {
+      alert("Failed to load payment data.");
+      return;
+    }
+
+    const data = await dataRes.json();
+
+    const {
+      email,
+      Plan_Name,
+      Plan_Cost,
+      Plan_Expiry,
+      abbreviation,
+      Country,
+      Country_Code // optional, if needed
+    } = data;
+
+    if (!email || !Plan_Cost) {
+      alert("Missing required payment fields.");
+      return;
+    }
+
+    const amountInKobo = parseFloat(Plan_Cost) * 100;
+
+    // Step 2: Initiate Paystack
+    PaystackPop.setup({
+      key: 'pk_live_d4f57287975b08a2f8f84538fe5f16a5bde44286',
+      email: email,
+      amount: amountInKobo,
+      currency: "KES",
+      ref: ref,
+      onClose: function () {
+        alert("Payment window closed.");
+      },
+      callback: function (response) {
+        const paidAt = new Date().toISOString();
+
+        // Step 3: Notify subscription handler
+        fetch("https://omp-subscription-handler.alexskeioslav.workers.dev/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email,
+            Plan_Name: Plan_Name,
+            Plan_Cost: `Ksh ${Plan_Cost}`,
+            Plan_Expiry: Plan_Expiry,
+            abbreviation: abbreviation,
+            Country: Country,
+            paid_at: paidAt,
+            transactionId: response.reference
+          }),
+        }).then(() => {
+          alert("✅ Payment successful! You may now return to the app.");
+        }).catch(() => {
+          alert("Payment succeeded");
+        });
       }
+    }).openIframe();
+  })();
+</script>
 
-      // ✅ Step 1: Retrieve payment data from Cloudflare Worker (KV)
-      const dataRes = await fetch("https://paystack-access-code.alexskeioslav.workers.dev/get?ref=" + ref);
-      if (!dataRes.ok) {
-        alert("Failed to load payment data.");
-        return;
-      }
-
-      const data = await dataRes.json();
-
-      const {
-        email,
-        Plan_Name,
-        Plan_Cost,
-        Plan_Expiry,
-        abbreviation,
-        Country
-      } = data;
-
-      if (!email || !Plan_Cost) {
-        alert("Missing required payment fields.");
-        return;
-      }
-
-      // ✅ Step 2: Launch Paystack payment UI
-      PaystackPop.setup({
-        key: 'pk_live_d4f57287975b08a2f8f84538fe5f16a5bde44286',
-        email: email,
-        amount: parseFloat(Plan_Cost.replace(/[^\d.]/g, "")) * 100, // Convert "Ksh 5500" → 550000
-        currency: "KES",
-        ref: ref,
-        onClose: function () {
-          alert("Payment window closed.");
-        },
-        callback: function (response) {
-          const paidAt = new Date().toISOString();
-
-          // ✅ Step 3: Send confirmation to subscription handler
-          fetch("https://omp-subscription-handler.alexskeioslav.workers.dev/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: email,
-              Plan_Name: Plan_Name,
-              Plan_Cost: Plan_Cost,
-              Plan_Expiry: Plan_Expiry,
-              abbreviation: abbreviation,
-              Country: Country,
-              paid_at: paidAt,
-              transactionId: response.reference
-            }),
-          }).then(() => {
-            alert("✅ Payment successful! You may now return to the app.");
-          }).catch(() => {
-            alert("Payment succeeded");
-          });
-        }
-      }).openIframe();
-    })();
-  </script>
 </body>
 </html>

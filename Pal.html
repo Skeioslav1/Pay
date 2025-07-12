@@ -86,7 +86,7 @@
             const payload = {
               email: paymentData.email,
               Plan_Name: paymentData.Plan_Name,
-              Plan_Cost: paymentData.Plan_Cost,
+              Plan_Cost: `$${paymentData.Plan_Cost}`,
               Plan_Expiry: paymentData.Plan_Expiry,
               abbreviation: paymentData.abbreviation,
               transactionId: transactionId,

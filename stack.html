@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pay with Paystack</title>
+  <script src="https://js.paystack.co/v1/inline.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 60px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Initializing Paystack...</h2>
+
+  <script>
+    (async function () {
+      const query = new URLSearchParams(window.location.search);
+
+      // ✅ Extract query params
+      const email = query.get("email");
+      const planName = query.get("Plan_Name");
+      const planCost = query.get("Plan_Cost"); // already in KES
+      const planExpiry = query.get("Plan_Expiry");
+      const abbreviation = query.get("abbreviation");
+      const country = query.get("Country");
+      const countryCode = query.get("Country_Code");
+
+      const countryFormatted = `${country} (${countryCode})`;
+      const paidAt = new Date().toISOString();
+
+      if (!email || !planName || !planCost || !planExpiry) {
+        alert("Missing payment info.");
+        return;
+      }
+
+      // ✅ Call your Cloudflare Worker to get access_code
+      const initRes = await fetch("https://paystack-access-code.alexskeioslav.workers.dev/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email,
+          amount: parseFloat(planCost) * 100, // in kobo (KES * 100)
+          currency: "KES"
+        }),
+      });
+
+      const initData = await initRes.json();
+      const accessCode = initData?.data?.access_code;
+
+      if (!accessCode) {
+        alert("Failed to get access_code");
+        return;
+      }
+
+      // ✅ Launch Paystack payment UI
+      PaystackPop.setup({
+        key: 'pk_live_d4f57287975b08a2f8f84538fe5f16a5bde44286', // 🔁 Replace with your public key
+        email: email,
+        amount: parseFloat(planCost) * 100,
+        currency: "KES",
+        ref: accessCode,
+        onClose: function () {
+          alert("Payment window closed.");
+        },
+        callback: function (response) {
+          // ✅ On success, POST to Cloudflare Worker
+          fetch("https://omp-subscription-handler.alexskeioslav.workers.dev/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: email,
+              Plan_Name: planName,
+              Plan_Cost: planCost,
+              Plan_Expiry: planExpiry,
+              abbreviation: abbreviation,
+              Country: countryFormatted,
+              paid_at: paidAt,
+              transactionId: response.reference
+            }),
+          }).then(() => {
+            alert("✅ Payment successful! You may now return to the app.");
+          }).catch(() => {
+            alert("Payment succeeded");
+          });
+        }
+      }).openIframe();
+    })();
+  </script>
+</body>
+</html>
+

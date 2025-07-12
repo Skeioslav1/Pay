@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pay with Paystack</title>
   <script src="https://js.paystack.co/v1/inline.js"></script>
   <style>
@@ -19,55 +19,43 @@
   <script>
     (async function () {
       const query = new URLSearchParams(window.location.search);
+      const ref = query.get("ref");
 
-      // ✅ Extract query params
-      const email = query.get("email");
-      const planName = query.get("Plan_Name");
-      const planCost = query.get("Plan_Cost"); // already in KES
-      const planExpiry = query.get("Plan_Expiry");
-      const abbreviation = query.get("abbreviation");
-      const country = query.get("Country");
-      const countryCode = query.get("Country_Code");
-
-      const countryFormatted = `${country} (${countryCode})`;
-      const paidAt = new Date().toISOString();
-
-      if (!email || !planName || !planCost || !planExpiry) {
-        alert("Missing payment info.");
+      if (!ref) {
+        alert("Missing reference ID.");
         return;
       }
 
-      // ✅ Call your Cloudflare Worker to get access_code
-      const initRes = await fetch("https://paystack-access-code.alexskeioslav.workers.dev/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email,
-          amount: parseFloat(planCost) * 100, // in kobo (KES * 100)
-          currency: "KES"
-        }),
-      });
-
-      const initData = await initRes.json();
-      const accessCode = initData?.data?.access_code;
-
-      if (!accessCode) {
-        alert("Failed to get access_code");
+      // ✅ Step 1: Retrieve sensitive data from KV via Cloudflare
+      const dataRes = await fetch("https://paystack-access-code.alexskeioslav.workers.dev/get?ref=" + ref);
+      if (!dataRes.ok) {
+        alert("Failed to load payment data.");
         return;
       }
 
-      // ✅ Launch Paystack payment UI
+      const data = await dataRes.json();
+
+      const {
+        email,
+        planName,
+        planCost,
+        planExpiry,
+        abbreviation,
+        countryFormatted,
+        paidAt
+      } = data;
+
+      // ✅ Step 2: Start Paystack payment
       PaystackPop.setup({
-        key: 'pk_live_d4f57287975b08a2f8f84538fe5f16a5bde44286', // 🔁 Replace with your public key
+        key: 'pk_live_d4f57287975b08a2f8f84538fe5f16a5bde44286',
         email: email,
         amount: parseFloat(planCost) * 100,
         currency: "KES",
-        ref: accessCode,
+        ref: ref,
         onClose: function () {
           alert("Payment window closed.");
         },
         callback: function (response) {
-          // ✅ On success, POST to Cloudflare Worker
           fetch("https://omp-subscription-handler.alexskeioslav.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -92,4 +80,3 @@
   </script>
 </body>
 </html>
-
